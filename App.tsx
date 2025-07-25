@@ -15,6 +15,11 @@ const ProgressBar: React.FC<{ progress: number }> = ({ progress }) => (
 const App: React.FC = () => {
     const [step, setStep] = useState<AppStep>(AppStep.Input);
     const [userInput, setUserInput] = useState<string>('');
+    const [publicationType, setPublicationType] = useState<string>('académica');
+    const [tone, setTone] = useState<string>('formal');
+    const [audience, setAudience] = useState<string>('profesionales');
+    const [numChapters, setNumChapters] = useState<number>(7);
+    const [wordCountTarget, setWordCountTarget] = useState<number>(25000);
     const [bookOutline, setBookOutline] = useState<BookOutline | null>(null);
     const [generatedBook, setGeneratedBook] = useState<GeneratedBook | null>(null);
     const [isLoading, setIsLoading] = useState<boolean>(false);
@@ -33,7 +38,7 @@ const App: React.FC = () => {
         setCurrentTask('Generando estructura del libro...');
         setProgress(5);
         try {
-            const outline = await generateBookOutline(userInput);
+            const outline = await generateBookOutline(userInput, publicationType, tone, audience, numChapters, wordCountTarget);
             setBookOutline(outline);
             setStep(AppStep.Outline);
         } catch (e: any) {
@@ -66,12 +71,13 @@ const App: React.FC = () => {
         setWordCount(0);
 
         const totalSections = bookOutline.capitulos.reduce((acc, chap) => acc + chap.secciones.length, 0) + 2; // + intro & conclusion
+        const wordsPerSection = totalSections > 0 ? Math.round(wordCountTarget / totalSections) : 0;
         let sectionsCompleted = 0;
 
         try {
             // Generate Introduction
             setCurrentTask(`Escribiendo introducción: ${bookOutline.introduccion.titulo}`);
-            const introContent = await generateSectionContent(bookOutline.titulo, "Introducción", bookOutline.introduccion.titulo);
+            const introContent = await generateSectionContent(bookOutline.titulo, "Introducción", bookOutline.introduccion.titulo, publicationType, tone, audience, wordsPerSection);
             accumulatedBook.introduccion = { ...accumulatedBook.introduccion, ...introContent };
             totalWords += countWords(introContent.texto);
             setWordCount(totalWords);
@@ -86,7 +92,7 @@ const App: React.FC = () => {
                 for (let j = 0; j < chapter.secciones.length; j++) {
                     const sectionTitle = chapter.secciones[j];
                     setCurrentTask(`Capítulo ${i + 1}/${bookOutline.capitulos.length}: Escribiendo sección "${sectionTitle}"`);
-                    const sectionContent = await generateSectionContent(bookOutline.titulo, chapter.titulo, sectionTitle);
+                    const sectionContent = await generateSectionContent(bookOutline.titulo, chapter.titulo, sectionTitle, publicationType, tone, audience, wordsPerSection);
                     newChapterContent.push({ ...sectionContent, titulo: sectionTitle });
                     totalWords += countWords(sectionContent.texto);
                     setWordCount(totalWords);
@@ -100,7 +106,7 @@ const App: React.FC = () => {
 
             // Generate Conclusion
             setCurrentTask(`Escribiendo conclusión: ${bookOutline.conclusion.titulo}`);
-            const conclusionContent = await generateSectionContent(bookOutline.titulo, "Conclusión", bookOutline.conclusion.titulo);
+            const conclusionContent = await generateSectionContent(bookOutline.titulo, "Conclusión", bookOutline.conclusion.titulo, publicationType, tone, audience, wordsPerSection);
             accumulatedBook.conclusion = { ...accumulatedBook.conclusion, ...conclusionContent };
             totalWords += countWords(conclusionContent.texto);
             setWordCount(totalWords);
@@ -117,7 +123,7 @@ const App: React.FC = () => {
             setIsLoading(false);
             setCurrentTask('');
         }
-    }, [bookOutline]);
+    }, [bookOutline, publicationType, tone, audience, wordCountTarget]);
 
     const handleExport = () => {
         if (generatedBook) {
@@ -136,19 +142,104 @@ const App: React.FC = () => {
 
     const renderInputStep = () => (
         <div className="w-full max-w-3xl">
-            <h2 className="text-2xl font-semibold text-text-primary mb-2">Paso 1: Proporciona tu material de origen</h2>
-            <p className="text-text-secondary mb-4">Pega un artículo completo, un resumen o simplemente describe el tema principal para tu libro.</p>
+            <h2 className="text-2xl font-semibold text-text-primary mb-2">Paso 1: Configura tu libro</h2>
+            <p className="text-text-secondary mb-4">Define el tema, estilo y público para generar un borrador a tu medida.</p>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                <div>
+                    <label htmlFor="publicationType" className="block text-sm font-medium text-text-secondary mb-1">Tipo de publicación</label>
+                    <select
+                        id="publicationType"
+                        value={publicationType}
+                        onChange={(e) => setPublicationType(e.target.value)}
+                        disabled={isLoading}
+                        className="w-full p-2 border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-brand-accent focus:border-brand-accent transition bg-white"
+                    >
+                        <option value="académica">Académica</option>
+                        <option value="difusión general">Difusión General</option>
+                        <option value="técnica">Técnica</option>
+                    </select>
+                </div>
+                 <div>
+                    <label htmlFor="tone" className="block text-sm font-medium text-text-secondary mb-1">Tono</label>
+                    <select
+                        id="tone"
+                        value={tone}
+                        onChange={(e) => setTone(e.target.value)}
+                        disabled={isLoading}
+                        className="w-full p-2 border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-brand-accent focus:border-brand-accent transition bg-white"
+                    >
+                        <option value="formal">Formal</option>
+                        <option value="profesional">Profesional</option>
+                        <option value="informal">Informal</option>
+                    </select>
+                </div>
+                 <div>
+                    <label htmlFor="audience" className="block text-sm font-medium text-text-secondary mb-1">Público objetivo</label>
+                    <select
+                        id="audience"
+                        value={audience}
+                        onChange={(e) => setAudience(e.target.value)}
+                        disabled={isLoading}
+                        className="w-full p-2 border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-brand-accent focus:border-brand-accent transition bg-white"
+                    >
+                        <option value="profesionales">Profesionales</option>
+                        <option value="general">General</option>
+                        <option value="adultos">Adultos</option>
+                        <option value="jóvenes">Jóvenes</option>
+                    </select>
+                </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6 mb-6">
+                <div>
+                    <label htmlFor="numChapters" className="block text-sm font-medium text-text-secondary mb-1">
+                        Número de capítulos: <span className="font-bold text-brand-dark">{numChapters}</span>
+                    </label>
+                    <input
+                        id="numChapters"
+                        type="range"
+                        min="5"
+                        max="20"
+                        step="1"
+                        value={numChapters}
+                        onChange={(e) => setNumChapters(Number(e.target.value))}
+                        disabled={isLoading}
+                        className="w-full h-2 bg-brand-light rounded-lg appearance-none cursor-pointer accent-brand-primary"
+                    />
+                </div>
+                 <div>
+                    <label htmlFor="wordCount" className="block text-sm font-medium text-text-secondary mb-1">
+                        Extensión aprox. (palabras): <span className="font-bold text-brand-dark">{wordCountTarget.toLocaleString('es-ES')}</span>
+                    </label>
+                    <input
+                        id="wordCount"
+                        type="range"
+                        min="10000"
+                        max="60000"
+                        step="1000"
+                        value={wordCountTarget}
+                        onChange={(e) => setWordCountTarget(Number(e.target.value))}
+                        disabled={isLoading}
+                        className="w-full h-2 bg-brand-light rounded-lg appearance-none cursor-pointer accent-brand-primary"
+                    />
+                </div>
+            </div>
+
+            <label htmlFor="mainTopic" className="block text-sm font-medium text-text-secondary mb-1">Tema principal o material de origen</label>
             <textarea
-                className="w-full h-64 p-4 border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-brand-accent focus:border-brand-accent transition"
-                placeholder="Ej: Un análisis sobre el impacto de la inteligencia artificial en la economía global del siglo XXI..."
+                id="mainTopic"
+                className="w-full h-60 p-4 border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-brand-accent focus:border-brand-accent transition"
+                placeholder="Pega un artículo completo, un resumen o simplemente describe el tema principal para tu libro. Ej: Un análisis sobre el impacto de la inteligencia artificial en la economía global del siglo XXI..."
                 value={userInput}
                 onChange={(e) => setUserInput(e.target.value)}
                 disabled={isLoading}
             />
+
             <button
                 onClick={handleGenerateOutline}
-                disabled={isLoading}
-                className="mt-4 w-full flex items-center justify-center bg-brand-primary text-white font-bold py-3 px-6 rounded-lg shadow-md hover:bg-brand-dark transition-colors duration-300 disabled:bg-gray-400 disabled:cursor-not-allowed"
+                disabled={isLoading || !userInput.trim()}
+                className="mt-6 w-full flex items-center justify-center bg-brand-primary text-white font-bold py-3 px-6 rounded-lg shadow-md hover:bg-brand-dark transition-colors duration-300 disabled:bg-gray-400 disabled:cursor-not-allowed"
             >
                 {isLoading ? <><Icon name="loading" className="mr-2" /> {currentTask}</> : <><Icon name="generate" className="mr-2" /> Generar Estructura del Libro</>}
             </button>
@@ -222,7 +313,7 @@ const App: React.FC = () => {
             <div className="flex justify-between items-center mb-4">
                  <div>
                     <h2 className="text-2xl font-semibold text-text-primary">Paso 4: Revisa y exporta tu libro</h2>
-                    <p className="text-text-secondary">Tu libro está listo. Puedes revisarlo aquí o descargarlo como un archivo DOCX.</p>
+                    <p className="text-text-secondary">Tu libro está listo. Puedes revisarlo aquí o descargarlo como un archivo .DOCX.</p>
                  </div>
                  <button
                     onClick={handleExport}
@@ -244,16 +335,6 @@ const App: React.FC = () => {
                             <div key={sIndex} className="mb-6">
                                 <h3 className="text-xl font-semibold text-brand-accent mb-2">{section.titulo}</h3>
                                 <p className="text-text-primary whitespace-pre-wrap leading-relaxed">{section.texto}</p>
-                                {section.fuentes && section.fuentes.length > 0 && (
-                                     <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-md">
-                                         <h4 className="font-semibold text-sm text-blue-800">Fuentes de Búsqueda de Google:</h4>
-                                         <ul className="list-disc list-inside text-sm text-blue-700 mt-1">
-                                             {section.fuentes.filter(f => f.web && f.web.uri).map((fuente, fIndex) => (
-                                                 <li key={fIndex}><a href={fuente.web!.uri} target="_blank" rel="noopener noreferrer" className="hover:underline">{fuente.web!.title || fuente.web!.uri}</a></li>
-                                             ))}
-                                         </ul>
-                                     </div>
-                                )}
                             </div>
                         ))}
                     </div>

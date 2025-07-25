@@ -1,4 +1,3 @@
-
 import { GoogleGenAI, Type, GenerateContentResponse, GroundingChunk } from "@google/genai";
 import type { BookOutline } from '../types';
 
@@ -37,18 +36,34 @@ const outlineSchema = {
     required: ['titulo', 'introduccion', 'capitulos', 'conclusion'],
 };
 
-export const generateBookOutline = async (article: string): Promise<BookOutline> => {
+export const generateBookOutline = async (
+    article: string, 
+    publicationType: string, 
+    tone: string, 
+    audience: string,
+    numChapters: number,
+    wordCountTarget: number
+): Promise<BookOutline> => {
     try {
         const response: GenerateContentResponse = await ai.models.generateContent({
             model: "gemini-2.5-flash",
-            contents: `Basado en el siguiente artículo/tema, crea una estructura detallada para un libro académico de aproximadamente 25,000 palabras. El libro debe tener una introducción, una conclusión, y entre 5 y 8 capítulos principales. Cada capítulo debe estar dividido en 3 a 5 secciones lógicas. Aplica la regla de mayúscula inicial solo en la primera palabra y nombres propios para todos los títulos y subtítulos.
-            
-            Artículo/Tema:
-            ${article}`,
+            contents: `Crea una estructura detallada para un libro basado en el siguiente artículo/tema.
+
+**Parámetros de la publicación:**
+- **Tipo:** ${publicationType}
+- **Tono:** ${tone}
+- **Público Objetivo:** ${audience}
+- **Tema principal:** ${article}
+
+**Requisitos de la estructura:**
+- El libro debe tener una extensión aproximada de ${wordCountTarget.toLocaleString('es-ES')} palabras.
+- Debe incluir una introducción, una conclusión y ${numChapters} capítulos principales.
+- Cada capítulo debe estar dividido en 3 a 5 secciones lógicas.
+- Aplica la regla de mayúscula inicial solo en la primera palabra y nombres propios para todos los títulos y subtítulos.`,
             config: {
                 responseMimeType: "application/json",
                 responseSchema: outlineSchema,
-                systemInstruction: "Eres un experto editor y planificador de contenido académico. Tu tarea es estructurar un libro completo a partir de un tema o artículo inicial. Tu respuesta debe ser únicamente el objeto JSON solicitado, sin explicaciones adicionales."
+                systemInstruction: "Eres un experto editor y planificador de contenido. Tu tarea es estructurar un libro completo a partir de un tema y unos parámetros específicos. Tu respuesta debe ser únicamente el objeto JSON solicitado, sin explicaciones adicionales."
             },
         });
 
@@ -63,16 +78,37 @@ export const generateBookOutline = async (article: string): Promise<BookOutline>
 export const generateSectionContent = async (
     bookTopic: string,
     chapterTitle: string,
-    sectionTitle: string
+    sectionTitle: string,
+    publicationType: string, 
+    tone: string, 
+    audience: string,
+    wordsPerSection: number
 ): Promise<{ texto: string; referencias: string[]; fuentes: GroundingChunk[] }> => {
     try {
-        const wordsPerSection = 600; // Aim for this many words to reach ~25k total
         const response: GenerateContentResponse = await ai.models.generateContent({
             model: "gemini-2.5-flash",
-            contents: `Escribe el contenido para la sección titulada "${sectionTitle}" dentro del capítulo "${chapterTitle}". El tema general del libro es "${bookTopic}". El texto de esta sección debe tener aproximadamente ${wordsPerSection} palabras. Investiga y utiliza fuentes académicas fiables (libros, artículos) usando la búsqueda de Google para respaldar TODAS las afirmaciones. Inserta citas en formato APA (Autor, Año) directamente en el texto donde sea necesario. Si incluyes diálogos, utiliza el guion largo (—). Al final del texto de esta sección, y claramente separado por '###REFERENCIAS###', crea una lista con las referencias completas en formato APA 7 de todas las fuentes que citaste.`,
+            contents: `Tu tarea es escribir el contenido para una sección específica de un libro.
+
+**Contexto del libro:**
+- **Tema general:** "${bookTopic}"
+- **Tipo de publicación:** ${publicationType}
+- **Tono deseado:** ${tone}
+- **Público objetivo:** ${audience}
+
+**Sección a escribir:**
+- **Capítulo:** "${chapterTitle}"
+- **Sección:** "${sectionTitle}"
+
+**Instrucciones de escritura:**
+- El texto de esta sección debe tener aproximadamente ${wordsPerSection} palabras.
+- Escribe con el tono y la complejidad adecuados para el tipo de publicación y el público definidos. Para publicaciones 'académica' o 'técnica', utiliza un lenguaje preciso y bien estructurado. Para 'difusión general', usa un lenguaje más accesible.
+- Investiga y utiliza fuentes fiables usando la búsqueda de Google para respaldar TODAS las afirmaciones.
+- Inserta citas en formato APA (Autor, Año) directamente en el texto donde sea necesario.
+- Si incluyes diálogos, utiliza el guion largo (—).
+- Al final del texto de esta sección, y claramente separado por '###REFERENCIAS###', crea una lista con las referencias completas en formato APA 7 de todas las fuentes que citaste.`,
             config: {
                 tools: [{ googleSearch: {} }],
-                systemInstruction: "Eres un escritor académico experto en investigación y redacción. Tu objetivo es escribir contenido de alta calidad, bien referenciado en formato APA 7."
+                systemInstruction: "Eres un escritor académico experto en investigación y redacción. Tu objetivo es escribir contenido de alta calidad, bien referenciado en formato APA 7, adaptando tu estilo a los parámetros especificados."
             },
         });
         

@@ -1,5 +1,6 @@
 {
   "name": "Asistente de Escritura Académica",
   "description": "Una aplicación web para generar borradores de libros académicos a partir de un tema o artículo. La aplicación crea una estructura, escribe el contenido de cada sección utilizando investigación con búsqueda de Google, y permite exportar el resultado final a un archivo .docx.",
-  "requestFramePermissions": []
+  "requestFramePermissions": [],
+  "prompt": ""
 }
