@@ -158,6 +158,9 @@ const App: React.FC = () => {
                         <option value="académica">Académica</option>
                         <option value="difusión general">Difusión General</option>
                         <option value="técnica">Técnica</option>
+                        <option value="tutorial">Tutorial</option>
+                        <option value="libro de casos">Libro de Casos</option>
+                        <option value="cuaderno de ejercicios">Cuaderno de Ejercicios</option>
                     </select>
                 </div>
                  <div>

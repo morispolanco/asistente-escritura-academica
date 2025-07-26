@@ -85,6 +85,10 @@ export const generateSectionContent = async (
     wordsPerSection: number
 ): Promise<{ texto: string; referencias: string[]; fuentes: GroundingChunk[] }> => {
     try {
+        const searchInstruction = publicationType === 'académica'
+            ? "Investiga y utiliza fuentes fiables usando exclusivamente Google Académico (Google Scholar) para respaldar TODAS las afirmaciones. Prioriza artículos científicos, tesis y publicaciones académicas revisadas por pares."
+            : "Investiga y utiliza fuentes fiables usando la búsqueda de Google para respaldar TODAS las afirmaciones.";
+
         const response: GenerateContentResponse = await ai.models.generateContent({
             model: "gemini-2.5-flash",
             contents: `Tu tarea es escribir el contenido para una sección específica de un libro.
@@ -102,7 +106,7 @@ export const generateSectionContent = async (
 **Instrucciones de escritura:**
 - El texto de esta sección debe tener aproximadamente ${wordsPerSection} palabras.
 - Escribe con el tono y la complejidad adecuados para el tipo de publicación y el público definidos. Para publicaciones 'académica' o 'técnica', utiliza un lenguaje preciso y bien estructurado. Para 'difusión general', usa un lenguaje más accesible.
-- Investiga y utiliza fuentes fiables usando la búsqueda de Google para respaldar TODAS las afirmaciones.
+- ${searchInstruction}
 - Inserta citas en formato APA (Autor, Año) directamente en el texto donde sea necesario.
 - Si incluyes diálogos, utiliza el guion largo (—).
 - Al final del texto de esta sección, y claramente separado por '###REFERENCIAS###', crea una lista con las referencias completas en formato APA 7 de todas las fuentes que citaste.`,
