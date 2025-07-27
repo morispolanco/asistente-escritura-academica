@@ -85,11 +85,7 @@ export const exportToDocx = async (book: GeneratedBook) => {
     });
 
     // References
-    const allReferences = new Set<string>();
-    book.introduccion.referencias.forEach(ref => allReferences.add(ref));
-    book.capitulos.forEach(chapter => chapter.contenido?.forEach(section => section.referencias.forEach(ref => allReferences.add(ref))));
-    book.conclusion.referencias.forEach(ref => allReferences.add(ref));
-    const sortedReferences = Array.from(allReferences).sort();
+    const sortedReferences = book.referencias.sort();
 
     if (sortedReferences.length > 0) {
         children.push(new Paragraph({ children: [new PageBreak()] }));

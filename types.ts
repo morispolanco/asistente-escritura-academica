@@ -15,8 +15,7 @@ export interface Chapter {
 export interface SectionContent {
   titulo: string;
   texto: string;
-  referencias: string[];
-  fuentes?: GroundingChunk[];
+  fuentes: GroundingChunk[];
 }
 
 export interface BookOutline {
@@ -31,6 +30,7 @@ export interface GeneratedBook {
   introduccion: SectionContent;
   capitulos: Chapter[];
   conclusion: SectionContent;
+  referencias: string[];
   outputLanguage: string;
 }
 

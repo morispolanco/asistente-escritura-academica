@@ -5,15 +5,7 @@ const generateHtmlContent = (book: GeneratedBook): string => {
     const isEnglish = book.outputLanguage === 'en';
 
     // Collect all references
-    const allReferences = new Set<string>();
-    book.introduccion.referencias.forEach(ref => allReferences.add(ref));
-    book.capitulos.forEach(chapter => {
-        chapter.contenido?.forEach(section => {
-            section.referencias.forEach(ref => allReferences.add(ref));
-        });
-    });
-    book.conclusion.referencias.forEach(ref => allReferences.add(ref));
-    const sortedReferences = Array.from(allReferences).sort();
+    const sortedReferences = book.referencias.sort();
     
     const bodyContent = `
         <article>

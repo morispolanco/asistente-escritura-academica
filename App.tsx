@@ -1,8 +1,9 @@
+
 import React, { useState, useCallback, useEffect } from 'react';
 import mammoth from 'mammoth';
 import { AppStep } from './types';
 import type { BookOutline, GeneratedBook, SectionContent, Chapter, GroundingChunk } from './types';
-import { generateBookOutline, generateSectionContent } from './services/geminiService';
+import { generateBookOutline, generateSectionContent, generateFinalReferenceList } from './services/geminiService';
 import { exportToDocx } from './services/docxService';
 import { Icon } from './components/Icon';
 
@@ -115,12 +116,13 @@ const App: React.FC = () => {
         setStep(AppStep.Generating);
         let accumulatedBook: GeneratedBook = {
             titulo: bookOutline.titulo,
-            introduccion: { titulo: bookOutline.introduccion.titulo, texto: '', referencias: [], fuentes: [] },
+            introduccion: { titulo: bookOutline.introduccion.titulo, texto: '', fuentes: [] },
             capitulos: bookOutline.capitulos.map(c => ({ ...c, contenido: [] })),
-            conclusion: { titulo: bookOutline.conclusion.titulo, texto: '', referencias: [], fuentes: [] },
+            conclusion: { titulo: bookOutline.conclusion.titulo, texto: '', fuentes: [] },
+            referencias: [],
             outputLanguage: outputLanguage,
         };
-        
+        let allSources: GroundingChunk[] = [];
         let totalWords = 0;
         setWordCount(0);
 
@@ -132,7 +134,8 @@ const App: React.FC = () => {
             // Generate Introduction
             setCurrentTask(`Escribiendo introducción: ${bookOutline.introduccion.titulo}`);
             const introContent = await generateSectionContent(bookOutline.titulo, "Introducción", bookOutline.introduccion.titulo, publicationType, tone, audience, wordsPerSection, outputLanguage, fileContent);
-            accumulatedBook.introduccion = { ...accumulatedBook.introduccion, ...introContent };
+            accumulatedBook.introduccion = { titulo: bookOutline.introduccion.titulo, ...introContent };
+            allSources.push(...introContent.fuentes);
             totalWords += countWords(introContent.texto);
             setWordCount(totalWords);
             sectionsCompleted++;
@@ -147,7 +150,8 @@ const App: React.FC = () => {
                     const sectionTitle = chapter.secciones[j];
                     setCurrentTask(`Capítulo ${i + 1}/${bookOutline.capitulos.length}: Escribiendo sección "${sectionTitle}"`);
                     const sectionContent = await generateSectionContent(bookOutline.titulo, chapter.titulo, sectionTitle, publicationType, tone, audience, wordsPerSection, outputLanguage, fileContent);
-                    newChapterContent.push({ ...sectionContent, titulo: sectionTitle });
+                    newChapterContent.push({ titulo: sectionTitle, ...sectionContent });
+                    allSources.push(...sectionContent.fuentes);
                     totalWords += countWords(sectionContent.texto);
                     setWordCount(totalWords);
                     sectionsCompleted++;
@@ -161,13 +165,21 @@ const App: React.FC = () => {
             // Generate Conclusion
             setCurrentTask(`Escribiendo conclusión: ${bookOutline.conclusion.titulo}`);
             const conclusionContent = await generateSectionContent(bookOutline.titulo, "Conclusión", bookOutline.conclusion.titulo, publicationType, tone, audience, wordsPerSection, outputLanguage, fileContent);
-            accumulatedBook.conclusion = { ...accumulatedBook.conclusion, ...conclusionContent };
+            accumulatedBook.conclusion = { titulo: bookOutline.conclusion.titulo, ...conclusionContent };
+            allSources.push(...conclusionContent.fuentes);
             totalWords += countWords(conclusionContent.texto);
             setWordCount(totalWords);
             sectionsCompleted++;
-            setProgress(100);
-
+            setProgress((sectionsCompleted / totalSections) * 100);
+            setGeneratedBook({...accumulatedBook});
+            
+            // Generate Final References
+            setCurrentTask(outputLanguage === 'en' ? 'Finalizing: Generating reference list...' : 'Finalizando: Generando lista de referencias...');
+            const finalReferences = await generateFinalReferenceList(allSources, bookOutline.titulo, outputLanguage);
+            accumulatedBook.referencias = finalReferences;
+            
             setGeneratedBook(accumulatedBook);
+            setProgress(100);
             setStep(AppStep.Review);
 
         } catch (e: any) {
@@ -394,13 +406,7 @@ const App: React.FC = () => {
 
                 <h2 className="text-2xl font-bold text-brand-secondary mt-8 mb-4">{generatedBook.outputLanguage === 'en' ? 'References' : 'Referencias'}</h2>
                 <div className="text-sm text-text-secondary space-y-2">
-                    {[
-                        ...new Set([
-                            ...generatedBook.introduccion.referencias,
-                            ...generatedBook.capitulos.flatMap(c => c.contenido?.flatMap(s => s.referencias) ?? []),
-                            ...generatedBook.conclusion.referencias
-                        ])
-                    ].sort().map((ref, index) => (
+                    {generatedBook.referencias.map((ref, index) => (
                         <p key={index}>{ref}</p>
                     ))}
                 </div>

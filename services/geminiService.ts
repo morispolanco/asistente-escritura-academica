@@ -137,7 +137,7 @@ export const generateSectionContent = async (
     wordsPerSection: number,
     outputLanguage: string,
     fileContent: string,
-): Promise<{ texto: string; referencias: string[]; fuentes: GroundingChunk[] }> => {
+): Promise<{ texto: string; fuentes: GroundingChunk[] }> => {
     const isEnglish = outputLanguage === 'en';
 
     const langInstructions = {
@@ -173,15 +173,10 @@ export const generateSectionContent = async (
         dialogue: isEnglish
             ? `- If you include dialogue, use em dashes (—).`
             : `- Si incluyes diálogos, utiliza el guion largo (—).`,
-        references: isEnglish
-            ? `- At the end of the text for this section, and clearly separated by '###REFERENCES###', create a list with the full references in APA 7 format for all the sources you cited.`
-            : `- Al final del texto de esta sección, y claramente separado por '###REFERENCIAS###', crea una lista con las referencias completas en formato APA 7 de todas las fuentes que citaste.`,
         systemInstruction: isEnglish 
-            ? "You are an expert academic writer specializing in research and composition. Your goal is to write high-quality, well-referenced content in APA 7 format, adapting your style to the specified parameters. Prioritize information from the user-provided base material if available."
-            : "Eres un escritor académico experto en investigación y redacción. Tu objetivo es escribir contenido de alta calidad, bien referenciado en formato APA 7, adaptando tu estilo a los parámetros especificados. Prioriza la información del material de base proporcionado por el usuario si está disponible."
+            ? "You are an expert academic writer specializing in research and composition. Your goal is to write high-quality, well-referenced content in APA 7 format, adapting your style to the specified parameters. Prioritize information from the user-provided base material if available. Do not create a reference list at the end of your response."
+            : "Eres un escritor académico experto en investigación y redacción. Tu objetivo es escribir contenido de alta calidad, bien referenciado en formato APA 7, adaptando tu estilo a los parámetros especificados. Prioriza la información del material de base proporcionado por el usuario si está disponible. No crees una lista de referencias al final de tu respuesta."
     };
-    
-    const referenceSeparator = isEnglish ? '###REFERENCES###' : '###REFERENCIAS###';
 
     const prompt = `
 ${langInstructions.task}
@@ -203,7 +198,6 @@ ${langInstructions.style}
 ${langInstructions.searchInstruction}
 ${langInstructions.citations}
 ${langInstructions.dialogue}
-${langInstructions.references}
     `.trim();
 
     try {
@@ -219,20 +213,76 @@ ${langInstructions.references}
         const content = response.text;
         const groundingChunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
         
-        const [rawTexto, referenciasStr] = content.split(referenceSeparator);
-        
-        const textoLimpio = cleanGeneratedText(rawTexto, sectionTitle);
-
-        const referencias = referenciasStr 
-            ? referenciasStr.trim().split('\n').filter(ref => ref.trim() !== '') 
-            : [];
+        const textoLimpio = cleanGeneratedText(content, sectionTitle);
             
-        return { texto: textoLimpio, referencias, fuentes: groundingChunks };
+        return { texto: textoLimpio, fuentes: groundingChunks };
     } catch (error) {
         console.error(`Error generating content for section "${sectionTitle}":`, error);
         const errorMessage = isEnglish 
             ? `Could not generate content for section "${sectionTitle}".`
             : `No se pudo generar el contenido para la sección "${sectionTitle}".`;
+        throw new Error(errorMessage);
+    }
+};
+
+export const generateFinalReferenceList = async (
+    sources: GroundingChunk[],
+    bookTopic: string,
+    outputLanguage: string
+): Promise<string[]> => {
+    const isEnglish = outputLanguage === 'en';
+
+    // Deduplicate sources based on URI
+    const uniqueSources = Array.from(new Map(sources.map(s => [s.web?.uri, s])).values())
+        .filter(s => s.web?.uri && s.web?.title);
+
+    if (uniqueSources.length === 0) {
+        return [];
+    }
+
+    const sourceList = uniqueSources.map(s => `- ${s.web!.title}: ${s.web!.uri}`).join('\n');
+
+    const langInstructions = {
+        task: isEnglish
+            ? `Your task is to create a single, consolidated, and alphabetized list of references in APA 7 format.`
+            : `Tu tarea es crear una única lista de referencias consolidada y ordenada alfabéticamente en formato APA 7.`,
+        context: isEnglish
+            ? `This reference list is for a book titled "${bookTopic}".`
+            : `Esta lista de referencias es para un libro titulado "${bookTopic}".`,
+        sourcesHeader: isEnglish ? `**Sources to include:**` : `**Fuentes a incluir:**`,
+        instructions: isEnglish
+            ? `- Create a full bibliographic entry for each source in valid APA 7 format.\n- Order the final list alphabetically by the author's last name.\n- The entire response must be ONLY the list of references, with each reference on a new line. Do not include any headers, titles, or other text.`
+            : `- Crea una entrada bibliográfica completa para cada fuente en formato APA 7 válido.\n- Ordena la lista final alfabéticamente por el apellido del autor.\n- La respuesta completa debe ser ÚNICAMENTE la lista de referencias, con cada referencia en una nueva línea. No incluyas encabezados, títulos ni otro texto.`,
+        systemInstruction: isEnglish
+            ? "You are an expert librarian specializing in academic citations. Your task is to generate a perfectly formatted APA 7 reference list from a given set of web sources."
+            : "Eres un bibliotecario experto especializado en citas académicas. Tu tarea es generar una lista de referencias en formato APA 7 perfectamente formateada a partir de un conjunto de fuentes web."
+    };
+
+    const prompt = `
+${langInstructions.task}
+${langInstructions.context}
+
+${langInstructions.sourcesHeader}
+${sourceList}
+
+**Instructions:**
+${langInstructions.instructions}
+    `.trim();
+
+    try {
+        const response = await ai.models.generateContent({
+            model: "gemini-2.5-flash",
+            contents: prompt,
+            config: {
+                systemInstruction: langInstructions.systemInstruction
+            },
+        });
+
+        const referenceText = response.text;
+        return referenceText.trim().split('\n').filter(ref => ref.trim() !== '');
+    } catch (error) {
+        console.error("Error generating final reference list:", error);
+        const errorMessage = isEnglish ? "Could not generate the final reference list." : "No se pudo generar la lista de referencias final.";
         throw new Error(errorMessage);
     }
 };
