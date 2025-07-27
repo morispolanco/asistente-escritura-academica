@@ -104,8 +104,8 @@ const generateHtmlContent = (book: GeneratedBook): string => {
                     line-height: 1.7;
                 }
                 .references p {
-                    text-indent: -0.5in;
-                    padding-left: 0.5in;
+                    margin-left: 3em;
+                    text-indent: -3em;
                     margin-bottom: 0.5rem;
                     word-break: break-all;
                 }

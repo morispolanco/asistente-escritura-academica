@@ -137,7 +137,7 @@ const App: React.FC = () => {
             accumulatedBook.introduccion = { titulo: bookOutline.introduccion.titulo, ...introContent };
             if (includeReferences && introContent.fuentes.length > 0) {
                  setCurrentTask(outputLanguage === 'en' ? 'Generating references for introduction...' : 'Generando referencias para la introducción...');
-                 const introRefs = await generateFinalReferenceList(introContent.fuentes, bookOutline.titulo, outputLanguage);
+                 const introRefs = await generateFinalReferenceList(introContent.fuentes, bookOutline.titulo, outputLanguage, 20);
                  accumulatedBook.introduccion.referencias = introRefs;
             }
             totalWords += countWords(introContent.texto);
@@ -167,7 +167,7 @@ const App: React.FC = () => {
                 }
                  if (includeReferences && chapterSources.length > 0) {
                     setCurrentTask(outputLanguage === 'en' ? `Generating references for Chapter ${i + 1}...` : `Generando referencias para el Capítulo ${i + 1}...`);
-                    const chapterRefs = await generateFinalReferenceList(chapterSources, bookOutline.titulo, outputLanguage);
+                    const chapterRefs = await generateFinalReferenceList(chapterSources, bookOutline.titulo, outputLanguage, 20);
                     accumulatedBook.capitulos[i].referencias = chapterRefs;
                     setGeneratedBook({...accumulatedBook});
                 }
@@ -179,7 +179,7 @@ const App: React.FC = () => {
             accumulatedBook.conclusion = { titulo: bookOutline.conclusion.titulo, ...conclusionContent };
             if (includeReferences && conclusionContent.fuentes.length > 0) {
                  setCurrentTask(outputLanguage === 'en' ? 'Generating references for conclusion...' : 'Generando referencias para la conclusión...');
-                 const conclusionRefs = await generateFinalReferenceList(conclusionContent.fuentes, bookOutline.titulo, outputLanguage);
+                 const conclusionRefs = await generateFinalReferenceList(conclusionContent.fuentes, bookOutline.titulo, outputLanguage, 20);
                  accumulatedBook.conclusion.referencias = conclusionRefs;
             }
             totalWords += countWords(conclusionContent.texto);

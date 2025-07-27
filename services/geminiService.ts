@@ -1,3 +1,4 @@
+
 import { GoogleGenAI, Type, GenerateContentResponse, GroundingChunk } from "@google/genai";
 import type { BookOutline } from '../types';
 
@@ -85,6 +86,9 @@ export const generateBookOutline = async (
         casing: isEnglish 
             ? `- For all titles and subtitles, use title case (capitalize the first letter of each major word).` 
             : `- Aplica la regla de mayúscula inicial solo en la primera palabra y nombres propios para todos los títulos y subtítulos.`,
+        uniqueness: isEnglish
+            ? `- All chapter and section titles must be unique throughout the entire book.`
+            : `- Todos los títulos de capítulos y secciones deben ser únicos en todo el libro.`,
         systemInstruction: isEnglish
             ? "You are an expert editor and content planner. Your task is to structure a complete book from a topic and specific parameters. Your response must be solely the requested JSON object, with no additional explanations."
             : "Eres un experto editor y planificador de contenido. Tu tarea es estructurar un libro completo a partir de un tema y unos parámetros específicos. Tu respuesta debe ser únicamente el objeto JSON solicitado, sin explicaciones adicionales."
@@ -104,6 +108,7 @@ ${langInstructions.wordCount}
 ${langInstructions.chapters}
 ${langInstructions.sections}
 ${langInstructions.casing}
+${langInstructions.uniqueness}
     `.trim();
 
     try {
@@ -233,13 +238,18 @@ ${langInstructions.style}`;
 export const generateFinalReferenceList = async (
     sources: GroundingChunk[],
     bookTopic: string,
-    outputLanguage: string
+    outputLanguage: string,
+    limit?: number
 ): Promise<string[]> => {
     const isEnglish = outputLanguage === 'en';
 
     // Deduplicate sources based on URI
-    const uniqueSources = Array.from(new Map(sources.map(s => [s.web?.uri, s])).values())
+    let uniqueSources = Array.from(new Map(sources.map(s => [s.web?.uri, s])).values())
         .filter(s => s.web?.uri && s.web?.title);
+
+    if (limit) {
+        uniqueSources = uniqueSources.slice(0, limit);
+    }
 
     if (uniqueSources.length === 0) {
         return [];
