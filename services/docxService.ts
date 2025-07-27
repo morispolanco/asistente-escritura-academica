@@ -61,6 +61,17 @@ export const exportToDocx = async (book: GeneratedBook) => {
     book.introduccion.texto.split('\n').filter(line => line.trim()).forEach(line => {
         children.push(createStyledParagraphFromLine(line));
     });
+    if (book.introduccion.referencias && book.introduccion.referencias.length > 0) {
+        const referencesTitle = isEnglish ? "References" : "Referencias";
+        children.push(new Paragraph({ text: referencesTitle, style: 'Heading2' }));
+        book.introduccion.referencias.sort().forEach(ref => {
+            children.push(new Paragraph({
+                text: ref.replace(/\[([^\]]+)\]\([^)]+\)/g, '$1'),
+                style: 'reference'
+            }));
+        });
+    }
+
 
     // Chapters
     book.capitulos.forEach((chapter, index) => {
@@ -75,6 +86,17 @@ export const exportToDocx = async (book: GeneratedBook) => {
                 children.push(createStyledParagraphFromLine(line));
             });
         });
+
+        if (chapter.referencias && chapter.referencias.length > 0) {
+            const referencesTitle = isEnglish ? "References" : "Referencias";
+            children.push(new Paragraph({ text: referencesTitle, style: 'Heading2' }));
+            chapter.referencias.sort().forEach(ref => {
+                children.push(new Paragraph({
+                    text: ref.replace(/\[([^\]]+)\]\([^)]+\)/g, '$1'),
+                    style: 'reference'
+                }));
+            });
+        }
     });
 
     // Conclusion
@@ -83,15 +105,10 @@ export const exportToDocx = async (book: GeneratedBook) => {
     book.conclusion.texto.split('\n').filter(line => line.trim()).forEach(line => {
         children.push(createStyledParagraphFromLine(line));
     });
-
-    // References
-    const sortedReferences = book.referencias.sort();
-
-    if (sortedReferences.length > 0) {
-        children.push(new Paragraph({ children: [new PageBreak()] }));
+     if (book.conclusion.referencias && book.conclusion.referencias.length > 0) {
         const referencesTitle = isEnglish ? "References" : "Referencias";
-        children.push(new Paragraph({ text: referencesTitle, style: 'Heading1' }));
-        sortedReferences.forEach(ref => {
+        children.push(new Paragraph({ text: referencesTitle, style: 'Heading2' }));
+        book.conclusion.referencias.sort().forEach(ref => {
             children.push(new Paragraph({
                 text: ref.replace(/\[([^\]]+)\]\([^)]+\)/g, '$1'),
                 style: 'reference'

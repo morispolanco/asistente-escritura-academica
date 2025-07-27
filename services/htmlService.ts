@@ -1,11 +1,9 @@
+
 import type { GeneratedBook } from '../types';
 
 const generateHtmlContent = (book: GeneratedBook): string => {
     const isEnglish = book.outputLanguage === 'en';
 
-    // Collect all references
-    const sortedReferences = book.referencias.sort();
-    
     const bodyContent = `
         <article>
             <h1 class="book-title">${book.titulo}</h1>
@@ -13,6 +11,12 @@ const generateHtmlContent = (book: GeneratedBook): string => {
             <section>
                 <h2 class="h1">${book.introduccion.titulo}</h2>
                 <div class="content">${book.introduccion.texto}</div>
+                 ${book.introduccion.referencias && book.introduccion.referencias.length > 0 ? `
+                    <h3 class="h2">${isEnglish ? 'References' : 'Referencias'}</h3>
+                    <div class="references">
+                        ${book.introduccion.referencias.sort().map(ref => `<p>${ref.replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')}</p>`).join('')}
+                    </div>
+                ` : ''}
             </section>
 
             ${book.capitulos.map((chapter, index) => `
@@ -24,22 +28,26 @@ const generateHtmlContent = (book: GeneratedBook): string => {
                             <div class="content">${section.texto}</div>
                         </div>
                     `).join('')}
+                    ${chapter.referencias && chapter.referencias.length > 0 ? `
+                        <h3 class="h2">${isEnglish ? 'References' : 'Referencias'}</h3>
+                        <div class="references">
+                            ${chapter.referencias.sort().map(ref => `<p>${ref.replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')}</p>`).join('')}
+                        </div>
+                    ` : ''}
                 </section>
             `).join('')}
 
             <section>
                 <h2 class="h1">${book.conclusion.titulo}</h2>
                 <div class="content">${book.conclusion.texto}</div>
+                ${book.conclusion.referencias && book.conclusion.referencias.length > 0 ? `
+                    <h3 class="h2">${isEnglish ? 'References' : 'Referencias'}</h3>
+                    <div class="references">
+                        ${book.conclusion.referencias.sort().map(ref => `<p>${ref.replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')}</p>`).join('')}
+                    </div>
+                ` : ''}
             </section>
 
-            ${sortedReferences.length > 0 ? `
-            <section>
-                <h2 class="h1">${isEnglish ? 'References' : 'Referencias'}</h2>
-                <div class="references">
-                    ${sortedReferences.map(ref => `<p>${ref.replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')}</p>`).join('')}
-                </div>
-            </section>
-            ` : ''}
         </article>
     `;
 

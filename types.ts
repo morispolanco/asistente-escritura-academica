@@ -10,6 +10,7 @@ export interface Chapter {
   titulo: string;
   secciones: string[];
   contenido?: SectionContent[];
+  referencias?: string[];
 }
 
 export interface SectionContent {
@@ -27,10 +28,9 @@ export interface BookOutline {
 
 export interface GeneratedBook {
   titulo: string;
-  introduccion: SectionContent;
+  introduccion: SectionContent & { referencias?: string[] };
   capitulos: Chapter[];
-  conclusion: SectionContent;
-  referencias: string[];
+  conclusion: SectionContent & { referencias?: string[] };
   outputLanguage: string;
 }
 

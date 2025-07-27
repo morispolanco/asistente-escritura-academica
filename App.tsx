@@ -1,3 +1,4 @@
+
 import React, { useState, useCallback, useEffect } from 'react';
 import mammoth from 'mammoth';
 import { AppStep } from './types';
@@ -116,13 +117,12 @@ const App: React.FC = () => {
         setStep(AppStep.Generating);
         let accumulatedBook: GeneratedBook = {
             titulo: bookOutline.titulo,
-            introduccion: { titulo: bookOutline.introduccion.titulo, texto: '', fuentes: [] },
-            capitulos: bookOutline.capitulos.map(c => ({ ...c, contenido: [] })),
-            conclusion: { titulo: bookOutline.conclusion.titulo, texto: '', fuentes: [] },
-            referencias: [],
+            introduccion: { titulo: bookOutline.introduccion.titulo, texto: '', fuentes: [], referencias: [] },
+            capitulos: bookOutline.capitulos.map(c => ({ ...c, contenido: [], referencias: [] })),
+            conclusion: { titulo: bookOutline.conclusion.titulo, texto: '', fuentes: [], referencias: [] },
             outputLanguage: outputLanguage,
         };
-        let allSources: GroundingChunk[] = [];
+        
         let totalWords = 0;
         setWordCount(0);
 
@@ -135,7 +135,11 @@ const App: React.FC = () => {
             setCurrentTask(`Escribiendo introducción: ${bookOutline.introduccion.titulo}`);
             const introContent = await generateSectionContent(bookOutline.titulo, "Introducción", bookOutline.introduccion.titulo, publicationType, tone, audience, wordsPerSection, outputLanguage, fileContent, includeReferences);
             accumulatedBook.introduccion = { titulo: bookOutline.introduccion.titulo, ...introContent };
-            allSources.push(...introContent.fuentes);
+            if (includeReferences && introContent.fuentes.length > 0) {
+                 setCurrentTask(outputLanguage === 'en' ? 'Generating references for introduction...' : 'Generando referencias para la introducción...');
+                 const introRefs = await generateFinalReferenceList(introContent.fuentes, bookOutline.titulo, outputLanguage);
+                 accumulatedBook.introduccion.referencias = introRefs;
+            }
             totalWords += countWords(introContent.texto);
             setWordCount(totalWords);
             sectionsCompleted++;
@@ -146,12 +150,13 @@ const App: React.FC = () => {
             for (let i = 0; i < bookOutline.capitulos.length; i++) {
                 const chapter = bookOutline.capitulos[i];
                 const newChapterContent: SectionContent[] = [];
+                const chapterSources: GroundingChunk[] = [];
                 for (let j = 0; j < chapter.secciones.length; j++) {
                     const sectionTitle = chapter.secciones[j];
                     setCurrentTask(`Capítulo ${i + 1}/${bookOutline.capitulos.length}: Escribiendo sección "${sectionTitle}"`);
                     const sectionContent = await generateSectionContent(bookOutline.titulo, chapter.titulo, sectionTitle, publicationType, tone, audience, wordsPerSection, outputLanguage, fileContent, includeReferences);
                     newChapterContent.push({ titulo: sectionTitle, ...sectionContent });
-                    allSources.push(...sectionContent.fuentes);
+                    chapterSources.push(...sectionContent.fuentes);
                     totalWords += countWords(sectionContent.texto);
                     setWordCount(totalWords);
                     sectionsCompleted++;
@@ -160,25 +165,28 @@ const App: React.FC = () => {
                     accumulatedBook.capitulos[i].contenido = newChapterContent;
                     setGeneratedBook({...accumulatedBook});
                 }
+                 if (includeReferences && chapterSources.length > 0) {
+                    setCurrentTask(outputLanguage === 'en' ? `Generating references for Chapter ${i + 1}...` : `Generando referencias para el Capítulo ${i + 1}...`);
+                    const chapterRefs = await generateFinalReferenceList(chapterSources, bookOutline.titulo, outputLanguage);
+                    accumulatedBook.capitulos[i].referencias = chapterRefs;
+                    setGeneratedBook({...accumulatedBook});
+                }
             }
 
             // Generate Conclusion
             setCurrentTask(`Escribiendo conclusión: ${bookOutline.conclusion.titulo}`);
             const conclusionContent = await generateSectionContent(bookOutline.titulo, "Conclusión", bookOutline.conclusion.titulo, publicationType, tone, audience, wordsPerSection, outputLanguage, fileContent, includeReferences);
             accumulatedBook.conclusion = { titulo: bookOutline.conclusion.titulo, ...conclusionContent };
-            allSources.push(...conclusionContent.fuentes);
+            if (includeReferences && conclusionContent.fuentes.length > 0) {
+                 setCurrentTask(outputLanguage === 'en' ? 'Generating references for conclusion...' : 'Generando referencias para la conclusión...');
+                 const conclusionRefs = await generateFinalReferenceList(conclusionContent.fuentes, bookOutline.titulo, outputLanguage);
+                 accumulatedBook.conclusion.referencias = conclusionRefs;
+            }
             totalWords += countWords(conclusionContent.texto);
             setWordCount(totalWords);
             sectionsCompleted++;
             setProgress((sectionsCompleted / totalSections) * 100);
             setGeneratedBook({...accumulatedBook});
-            
-            // Generate Final References
-            if (includeReferences) {
-                setCurrentTask(outputLanguage === 'en' ? 'Finalizing: Generating reference list...' : 'Finalizando: Generando lista de referencias...');
-                const finalReferences = await generateFinalReferenceList(allSources, bookOutline.titulo, outputLanguage);
-                accumulatedBook.referencias = finalReferences;
-            }
             
             setGeneratedBook(accumulatedBook);
             setProgress(100);
@@ -403,6 +411,17 @@ const App: React.FC = () => {
 
                 <h2 className="text-2xl font-bold text-brand-secondary mt-8 mb-4">{generatedBook.introduccion.titulo}</h2>
                 <p className="text-text-primary whitespace-pre-wrap leading-relaxed">{generatedBook.introduccion.texto}</p>
+                {generatedBook.introduccion.referencias && generatedBook.introduccion.referencias.length > 0 && (
+                    <div className="mt-6">
+                        <h3 className="text-xl font-semibold text-brand-accent mb-2">{generatedBook.outputLanguage === 'en' ? 'References' : 'Referencias'}</h3>
+                        <div className="text-sm text-text-secondary space-y-2">
+                            {generatedBook.introduccion.referencias.map((ref, index) => (
+                                <p key={index}>{ref}</p>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
 
                 {generatedBook.capitulos.map((chapter, index) => (
                     <div key={index}>
@@ -413,21 +432,30 @@ const App: React.FC = () => {
                                 <p className="text-text-primary whitespace-pre-wrap leading-relaxed">{section.texto}</p>
                             </div>
                         ))}
+                         {chapter.referencias && chapter.referencias.length > 0 && (
+                            <div className="mt-6">
+                                <h3 className="text-xl font-semibold text-brand-accent mb-2">{generatedBook.outputLanguage === 'en' ? 'References' : 'Referencias'}</h3>
+                                <div className="text-sm text-text-secondary space-y-2">
+                                    {chapter.referencias.map((ref, index) => (
+                                        <p key={index}>{ref}</p>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
                     </div>
                 ))}
 
                 <h2 className="text-2xl font-bold text-brand-secondary mt-8 mb-4">{generatedBook.conclusion.titulo}</h2>
                 <p className="text-text-primary whitespace-pre-wrap leading-relaxed">{generatedBook.conclusion.texto}</p>
-
-                {generatedBook.referencias && generatedBook.referencias.length > 0 && (
-                    <>
-                        <h2 className="text-2xl font-bold text-brand-secondary mt-8 mb-4">{generatedBook.outputLanguage === 'en' ? 'References' : 'Referencias'}</h2>
+                {generatedBook.conclusion.referencias && generatedBook.conclusion.referencias.length > 0 && (
+                    <div className="mt-6">
+                        <h3 className="text-xl font-semibold text-brand-accent mb-2">{generatedBook.outputLanguage === 'en' ? 'References' : 'Referencias'}</h3>
                         <div className="text-sm text-text-secondary space-y-2">
-                            {generatedBook.referencias.map((ref, index) => (
+                            {generatedBook.conclusion.referencias.map((ref, index) => (
                                 <p key={index}>{ref}</p>
                             ))}
                         </div>
-                    </>
+                    </div>
                 )}
             </div>
              <div className="mt-6 text-center">
