@@ -31,6 +31,7 @@ export interface GeneratedBook {
   introduccion: SectionContent;
   capitulos: Chapter[];
   conclusion: SectionContent;
+  outputLanguage: string;
 }
 
 export interface GroundingChunk {

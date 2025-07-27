@@ -1,5 +1,5 @@
 {
-  "name": "asistente-de-escritura-académica",
+  "name": "asistente-de-escritura-ia",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -12,7 +12,8 @@
     "react-dom": "^19.1.0",
     "react": "^19.1.0",
     "@google/genai": "^1.10.0",
-    "docx": "8.5.0"
+    "docx": "8.5.0",
+    "mammoth": "1.7.0"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",

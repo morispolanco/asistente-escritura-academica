@@ -2,6 +2,8 @@
 import type { GeneratedBook } from '../types';
 
 const generateHtmlContent = (book: GeneratedBook): string => {
+    const isEnglish = book.outputLanguage === 'en';
+
     // Collect all references
     const allReferences = new Set<string>();
     book.introduccion.referencias.forEach(ref => allReferences.add(ref));
@@ -12,23 +14,6 @@ const generateHtmlContent = (book: GeneratedBook): string => {
     });
     book.conclusion.referencias.forEach(ref => allReferences.add(ref));
     const sortedReferences = Array.from(allReferences).sort();
-
-    const escapeRegExp = (string: string) => {
-        return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); // $& means the whole matched string
-    };
-
-    const cleanSectionText = (text: string, title: string) => {
-        // First, try to remove a markdown-style heading of the title
-        const titlePattern = new RegExp(`^#+\\s*${escapeRegExp(title)}\\s*\\n?`, 'i');
-        let cleanedText = text.replace(titlePattern, '').trim();
-
-        // If that didn't work, check if the text starts with the plain title and remove it
-        if (cleanedText.toLowerCase().startsWith(title.toLowerCase())) {
-             cleanedText = cleanedText.substring(title.length).trim();
-        }
-        
-        return cleanedText;
-    };
     
     const bodyContent = `
         <article>
@@ -36,16 +21,16 @@ const generateHtmlContent = (book: GeneratedBook): string => {
 
             <section>
                 <h2 class="h1">${book.introduccion.titulo}</h2>
-                <div class="content">${cleanSectionText(book.introduccion.texto, book.introduccion.titulo)}</div>
+                <div class="content">${book.introduccion.texto}</div>
             </section>
 
             ${book.capitulos.map((chapter, index) => `
                 <section>
-                    <h2 class="h1">Capítulo ${index + 1}: ${chapter.titulo}</h2>
+                    <h2 class="h1">${isEnglish ? 'Chapter' : 'Capítulo'} ${index + 1}: ${chapter.titulo}</h2>
                     ${chapter.contenido?.map(section => `
                         <div class="section-content">
                             <h3 class="h2">${section.titulo}</h3>
-                            <div class="content">${cleanSectionText(section.texto, section.titulo)}</div>
+                            <div class="content">${section.texto}</div>
                         </div>
                     `).join('')}
                 </section>
@@ -53,11 +38,11 @@ const generateHtmlContent = (book: GeneratedBook): string => {
 
             <section>
                 <h2 class="h1">${book.conclusion.titulo}</h2>
-                <div class="content">${cleanSectionText(book.conclusion.texto, book.conclusion.titulo)}</div>
+                <div class="content">${book.conclusion.texto}</div>
             </section>
 
             <section>
-                <h2 class="h1">Referencias</h2>
+                <h2 class="h1">${isEnglish ? 'References' : 'Referencias'}</h2>
                 <div class="references">
                     ${sortedReferences.map(ref => `<p>${ref.replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')}</p>`).join('')}
                 </div>
@@ -67,7 +52,7 @@ const generateHtmlContent = (book: GeneratedBook): string => {
 
     return `
         <!DOCTYPE html>
-        <html lang="es">
+        <html lang="${isEnglish ? 'en' : 'es'}">
         <head>
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">

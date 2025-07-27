@@ -1,5 +1,5 @@
-
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
+import mammoth from 'mammoth';
 import { AppStep } from './types';
 import type { BookOutline, GeneratedBook, SectionContent, Chapter, GroundingChunk } from './types';
 import { generateBookOutline, generateSectionContent } from './services/geminiService';
@@ -20,6 +20,10 @@ const App: React.FC = () => {
     const [audience, setAudience] = useState<string>('profesionales');
     const [numChapters, setNumChapters] = useState<number>(7);
     const [wordCountTarget, setWordCountTarget] = useState<number>(25000);
+    const [outputLanguage, setOutputLanguage] = useState<string>('es');
+    const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
+    const [fileContent, setFileContent] = useState<string>('');
+
     const [bookOutline, setBookOutline] = useState<BookOutline | null>(null);
     const [generatedBook, setGeneratedBook] = useState<GeneratedBook | null>(null);
     const [isLoading, setIsLoading] = useState<boolean>(false);
@@ -27,6 +31,55 @@ const App: React.FC = () => {
     const [progress, setProgress] = useState(0);
     const [currentTask, setCurrentTask] = useState('');
     const [wordCount, setWordCount] = useState(0);
+
+    useEffect(() => {
+        if (uploadedFiles.length === 0) {
+            setFileContent('');
+            return;
+        }
+
+        const readFiles = async () => {
+            let allContent = '';
+            let errorMessages: string[] = [];
+
+            for (const file of uploadedFiles) {
+                if (file.size > 5 * 1024 * 1024) { // 5MB limit
+                    errorMessages.push(`El archivo ${file.name} excede el límite de 5MB.`);
+                    continue;
+                }
+
+                try {
+                    let text = '';
+                    const fileExtension = file.name.split('.').pop()?.toLowerCase();
+
+                    if (fileExtension === 'docx') {
+                        const arrayBuffer = await file.arrayBuffer();
+                        const result = await mammoth.extractRawText({ arrayBuffer });
+                        text = result.value;
+                    } else if (fileExtension === 'txt' || fileExtension === 'md') {
+                        text = await file.text();
+                    } else {
+                        console.warn(`Tipo de archivo no soportado: ${file.name}. Se omitirá.`);
+                        continue;
+                    }
+                    allContent += `\n\n--- CONTENIDO DEL ARCHIVO: ${file.name} ---\n${text}`;
+                } catch (err) {
+                    console.error(err);
+                    errorMessages.push(`No se pudo leer el archivo ${file.name}.`);
+                }
+            }
+            
+            if(errorMessages.length > 0) {
+                setError(errorMessages.join(' '));
+            } else {
+                setError('');
+            }
+            
+            setFileContent(allContent.trim());
+        };
+
+        readFiles();
+    }, [uploadedFiles]);
 
     const handleGenerateOutline = async () => {
         if (!userInput.trim()) {
@@ -38,7 +91,7 @@ const App: React.FC = () => {
         setCurrentTask('Generando estructura del libro...');
         setProgress(5);
         try {
-            const outline = await generateBookOutline(userInput, publicationType, tone, audience, numChapters, wordCountTarget);
+            const outline = await generateBookOutline(userInput, publicationType, tone, audience, numChapters, wordCountTarget, outputLanguage, fileContent);
             setBookOutline(outline);
             setStep(AppStep.Outline);
         } catch (e: any) {
@@ -65,6 +118,7 @@ const App: React.FC = () => {
             introduccion: { titulo: bookOutline.introduccion.titulo, texto: '', referencias: [], fuentes: [] },
             capitulos: bookOutline.capitulos.map(c => ({ ...c, contenido: [] })),
             conclusion: { titulo: bookOutline.conclusion.titulo, texto: '', referencias: [], fuentes: [] },
+            outputLanguage: outputLanguage,
         };
         
         let totalWords = 0;
@@ -77,7 +131,7 @@ const App: React.FC = () => {
         try {
             // Generate Introduction
             setCurrentTask(`Escribiendo introducción: ${bookOutline.introduccion.titulo}`);
-            const introContent = await generateSectionContent(bookOutline.titulo, "Introducción", bookOutline.introduccion.titulo, publicationType, tone, audience, wordsPerSection);
+            const introContent = await generateSectionContent(bookOutline.titulo, "Introducción", bookOutline.introduccion.titulo, publicationType, tone, audience, wordsPerSection, outputLanguage, fileContent);
             accumulatedBook.introduccion = { ...accumulatedBook.introduccion, ...introContent };
             totalWords += countWords(introContent.texto);
             setWordCount(totalWords);
@@ -92,7 +146,7 @@ const App: React.FC = () => {
                 for (let j = 0; j < chapter.secciones.length; j++) {
                     const sectionTitle = chapter.secciones[j];
                     setCurrentTask(`Capítulo ${i + 1}/${bookOutline.capitulos.length}: Escribiendo sección "${sectionTitle}"`);
-                    const sectionContent = await generateSectionContent(bookOutline.titulo, chapter.titulo, sectionTitle, publicationType, tone, audience, wordsPerSection);
+                    const sectionContent = await generateSectionContent(bookOutline.titulo, chapter.titulo, sectionTitle, publicationType, tone, audience, wordsPerSection, outputLanguage, fileContent);
                     newChapterContent.push({ ...sectionContent, titulo: sectionTitle });
                     totalWords += countWords(sectionContent.texto);
                     setWordCount(totalWords);
@@ -106,7 +160,7 @@ const App: React.FC = () => {
 
             // Generate Conclusion
             setCurrentTask(`Escribiendo conclusión: ${bookOutline.conclusion.titulo}`);
-            const conclusionContent = await generateSectionContent(bookOutline.titulo, "Conclusión", bookOutline.conclusion.titulo, publicationType, tone, audience, wordsPerSection);
+            const conclusionContent = await generateSectionContent(bookOutline.titulo, "Conclusión", bookOutline.conclusion.titulo, publicationType, tone, audience, wordsPerSection, outputLanguage, fileContent);
             accumulatedBook.conclusion = { ...accumulatedBook.conclusion, ...conclusionContent };
             totalWords += countWords(conclusionContent.texto);
             setWordCount(totalWords);
@@ -123,19 +177,40 @@ const App: React.FC = () => {
             setIsLoading(false);
             setCurrentTask('');
         }
-    }, [bookOutline, publicationType, tone, audience, wordCountTarget]);
+    }, [bookOutline, publicationType, tone, audience, wordCountTarget, outputLanguage, fileContent]);
 
     const handleExport = () => {
         if (generatedBook) {
             exportToDocx(generatedBook);
         }
     };
+    
+    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.files) {
+            setUploadedFiles(Array.from(e.target.files));
+        }
+    };
+    
+    const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+            setUploadedFiles(Array.from(e.dataTransfer.files));
+            e.dataTransfer.clearData();
+        }
+    };
+
+    const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+        e.preventDefault();
+        e.stopPropagation();
+    };
+
 
     const renderHeader = () => (
         <header className="bg-brand-primary p-4 shadow-md">
             <div className="container mx-auto flex items-center justify-center">
                 <Icon name="book" className="w-8 h-8 text-white mr-3" />
-                <h1 className="text-2xl font-bold text-white">Asistente de Escritura Académica</h1>
+                <h1 className="text-2xl font-bold text-white">Asistente de Escritura IA</h1>
             </div>
         </header>
     );
@@ -145,16 +220,10 @@ const App: React.FC = () => {
             <h2 className="text-2xl font-semibold text-text-primary mb-2">Paso 1: Configura tu libro</h2>
             <p className="text-text-secondary mb-4">Define el tema, estilo y público para generar un borrador a tu medida.</p>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
                 <div>
                     <label htmlFor="publicationType" className="block text-sm font-medium text-text-secondary mb-1">Tipo de publicación</label>
-                    <select
-                        id="publicationType"
-                        value={publicationType}
-                        onChange={(e) => setPublicationType(e.target.value)}
-                        disabled={isLoading}
-                        className="w-full p-2 border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-brand-accent focus:border-brand-accent transition bg-white"
-                    >
+                    <select id="publicationType" value={publicationType} onChange={(e) => setPublicationType(e.target.value)} disabled={isLoading} className="w-full p-2 border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-brand-accent focus:border-brand-accent transition bg-white">
                         <option value="académica">Académica</option>
                         <option value="difusión general">Difusión General</option>
                         <option value="técnica">Técnica</option>
@@ -165,13 +234,7 @@ const App: React.FC = () => {
                 </div>
                  <div>
                     <label htmlFor="tone" className="block text-sm font-medium text-text-secondary mb-1">Tono</label>
-                    <select
-                        id="tone"
-                        value={tone}
-                        onChange={(e) => setTone(e.target.value)}
-                        disabled={isLoading}
-                        className="w-full p-2 border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-brand-accent focus:border-brand-accent transition bg-white"
-                    >
+                    <select id="tone" value={tone} onChange={(e) => setTone(e.target.value)} disabled={isLoading} className="w-full p-2 border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-brand-accent focus:border-brand-accent transition bg-white">
                         <option value="formal">Formal</option>
                         <option value="profesional">Profesional</option>
                         <option value="informal">Informal</option>
@@ -179,71 +242,63 @@ const App: React.FC = () => {
                 </div>
                  <div>
                     <label htmlFor="audience" className="block text-sm font-medium text-text-secondary mb-1">Público objetivo</label>
-                    <select
-                        id="audience"
-                        value={audience}
-                        onChange={(e) => setAudience(e.target.value)}
-                        disabled={isLoading}
-                        className="w-full p-2 border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-brand-accent focus:border-brand-accent transition bg-white"
-                    >
+                    <select id="audience" value={audience} onChange={(e) => setAudience(e.target.value)} disabled={isLoading} className="w-full p-2 border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-brand-accent focus:border-brand-accent transition bg-white">
                         <option value="profesionales">Profesionales</option>
                         <option value="general">General</option>
                         <option value="adultos">Adultos</option>
                         <option value="jóvenes">Jóvenes</option>
+                        <option value="padres de familia">Padres de familia</option>
+                    </select>
+                </div>
+                <div>
+                    <label htmlFor="outputLanguage" className="block text-sm font-medium text-text-secondary mb-1">Idioma de salida</label>
+                    <select id="outputLanguage" value={outputLanguage} onChange={(e) => setOutputLanguage(e.target.value)} disabled={isLoading} className="w-full p-2 border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-brand-accent focus:border-brand-accent transition bg-white">
+                        <option value="es">Español</option>
+                        <option value="en">English</option>
                     </select>
                 </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6 mb-6">
                 <div>
-                    <label htmlFor="numChapters" className="block text-sm font-medium text-text-secondary mb-1">
-                        Número de capítulos: <span className="font-bold text-brand-dark">{numChapters}</span>
-                    </label>
-                    <input
-                        id="numChapters"
-                        type="range"
-                        min="5"
-                        max="20"
-                        step="1"
-                        value={numChapters}
-                        onChange={(e) => setNumChapters(Number(e.target.value))}
-                        disabled={isLoading}
-                        className="w-full h-2 bg-brand-light rounded-lg appearance-none cursor-pointer accent-brand-primary"
-                    />
+                    <label htmlFor="numChapters" className="block text-sm font-medium text-text-secondary mb-1">Número de capítulos: <span className="font-bold text-brand-dark">{numChapters}</span></label>
+                    <input id="numChapters" type="range" min="5" max="20" step="1" value={numChapters} onChange={(e) => setNumChapters(Number(e.target.value))} disabled={isLoading} className="w-full h-2 bg-brand-light rounded-lg appearance-none cursor-pointer accent-brand-primary" />
                 </div>
                  <div>
-                    <label htmlFor="wordCount" className="block text-sm font-medium text-text-secondary mb-1">
-                        Extensión aprox. (palabras): <span className="font-bold text-brand-dark">{wordCountTarget.toLocaleString('es-ES')}</span>
-                    </label>
-                    <input
-                        id="wordCount"
-                        type="range"
-                        min="10000"
-                        max="60000"
-                        step="1000"
-                        value={wordCountTarget}
-                        onChange={(e) => setWordCountTarget(Number(e.target.value))}
-                        disabled={isLoading}
-                        className="w-full h-2 bg-brand-light rounded-lg appearance-none cursor-pointer accent-brand-primary"
-                    />
+                    <label htmlFor="wordCount" className="block text-sm font-medium text-text-secondary mb-1">Extensión aprox. (palabras): <span className="font-bold text-brand-dark">{wordCountTarget.toLocaleString('es-ES')}</span></label>
+                    <input id="wordCount" type="range" min="10000" max="60000" step="1000" value={wordCountTarget} onChange={(e) => setWordCountTarget(Number(e.target.value))} disabled={isLoading} className="w-full h-2 bg-brand-light rounded-lg appearance-none cursor-pointer accent-brand-primary" />
                 </div>
+            </div>
+            
+            <div className="my-6">
+                <label className="block text-sm font-medium text-text-secondary mb-1">Añadir documentos como base de conocimiento (opcional)</label>
+                <div onDrop={handleDrop} onDragOver={handleDragOver} className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md cursor-pointer hover:border-brand-accent">
+                    <div className="space-y-1 text-center">
+                        <svg className="mx-auto h-12 w-12 text-gray-400" stroke="currentColor" fill="none" viewBox="0 0 48 48" aria-hidden="true"><path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                        <div className="flex text-sm text-gray-600">
+                            <label htmlFor="file-upload" className="relative rounded-md font-medium text-brand-primary hover:text-brand-dark focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-brand-accent">
+                                <span>Sube tus archivos</span>
+                                <input id="file-upload" name="file-upload" type="file" className="sr-only" multiple onChange={handleFileChange} accept=".txt,.md,.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" disabled={isLoading}/>
+                            </label>
+                            <p className="pl-1">o arrástralos aquí</p>
+                        </div>
+                        <p className="text-xs text-gray-500">.txt, .md, .docx (hasta 5MB por archivo)</p>
+                    </div>
+                </div>
+                 {uploadedFiles.length > 0 && (
+                    <div className="mt-3 text-sm text-text-secondary">
+                        <p className="font-medium text-text-primary">Archivos seleccionados:</p>
+                        <ul className="list-disc list-inside mt-1 space-y-1">
+                            {uploadedFiles.map(file => <li key={file.name}>{file.name} ({Math.round(file.size / 1024)} KB)</li>)}
+                        </ul>
+                    </div>
+                )}
             </div>
 
             <label htmlFor="mainTopic" className="block text-sm font-medium text-text-secondary mb-1">Tema principal o material de origen</label>
-            <textarea
-                id="mainTopic"
-                className="w-full h-60 p-4 border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-brand-accent focus:border-brand-accent transition"
-                placeholder="Pega un artículo completo, un resumen o simplemente describe el tema principal para tu libro. Ej: Un análisis sobre el impacto de la inteligencia artificial en la economía global del siglo XXI..."
-                value={userInput}
-                onChange={(e) => setUserInput(e.target.value)}
-                disabled={isLoading}
-            />
+            <textarea id="mainTopic" className="w-full h-40 p-4 border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-brand-accent focus:border-brand-accent transition" placeholder="Pega un artículo completo, un resumen o simplemente describe el tema principal para tu libro. Ej: Un análisis sobre el impacto de la inteligencia artificial en la economía global del siglo XXI..." value={userInput} onChange={(e) => setUserInput(e.target.value)} disabled={isLoading} />
 
-            <button
-                onClick={handleGenerateOutline}
-                disabled={isLoading || !userInput.trim()}
-                className="mt-6 w-full flex items-center justify-center bg-brand-primary text-white font-bold py-3 px-6 rounded-lg shadow-md hover:bg-brand-dark transition-colors duration-300 disabled:bg-gray-400 disabled:cursor-not-allowed"
-            >
+            <button onClick={handleGenerateOutline} disabled={isLoading || !userInput.trim()} className="mt-6 w-full flex items-center justify-center bg-brand-primary text-white font-bold py-3 px-6 rounded-lg shadow-md hover:bg-brand-dark transition-colors duration-300 disabled:bg-gray-400 disabled:cursor-not-allowed">
                 {isLoading ? <><Icon name="loading" className="mr-2" /> {currentTask}</> : <><Icon name="generate" className="mr-2" /> Generar Estructura del Libro</>}
             </button>
         </div>
@@ -275,16 +330,10 @@ const App: React.FC = () => {
                 </div>
             </div>
             <div className="mt-6 flex space-x-4">
-                <button
-                    onClick={() => { setStep(AppStep.Input); setBookOutline(null); }}
-                    className="flex-1 bg-gray-500 text-white font-bold py-3 px-6 rounded-lg shadow-md hover:bg-gray-600 transition-colors duration-300"
-                >
+                <button onClick={() => { setStep(AppStep.Input); setBookOutline(null); }} className="flex-1 bg-gray-500 text-white font-bold py-3 px-6 rounded-lg shadow-md hover:bg-gray-600 transition-colors duration-300">
                     Volver y Editar
                 </button>
-                <button
-                    onClick={handleGenerateBook}
-                    className="flex-1 bg-brand-primary text-white font-bold py-3 px-6 rounded-lg shadow-md hover:bg-brand-dark transition-colors duration-300"
-                >
+                <button onClick={handleGenerateBook} className="flex-1 bg-brand-primary text-white font-bold py-3 px-6 rounded-lg shadow-md hover:bg-brand-dark transition-colors duration-300">
                     <Icon name="book" className="mr-2 inline"/> Comenzar a Escribir
                 </button>
             </div>
@@ -318,10 +367,7 @@ const App: React.FC = () => {
                     <h2 className="text-2xl font-semibold text-text-primary">Paso 4: Revisa y exporta tu libro</h2>
                     <p className="text-text-secondary">Tu libro está listo. Puedes revisarlo aquí o descargarlo como un archivo .DOCX.</p>
                  </div>
-                 <button
-                    onClick={handleExport}
-                    className="bg-green-600 text-white font-bold py-3 px-6 rounded-lg shadow-md hover:bg-green-700 transition-colors duration-300 flex items-center"
-                >
+                 <button onClick={handleExport} className="bg-green-600 text-white font-bold py-3 px-6 rounded-lg shadow-md hover:bg-green-700 transition-colors duration-300 flex items-center">
                     <Icon name="download" className="mr-2" /> Exportar a .DOCX
                 </button>
             </div>
@@ -333,7 +379,7 @@ const App: React.FC = () => {
 
                 {generatedBook.capitulos.map((chapter, index) => (
                     <div key={index}>
-                        <h2 className="text-2xl font-bold text-brand-secondary mt-8 mb-4">Capítulo {index + 1}: {chapter.titulo}</h2>
+                        <h2 className="text-2xl font-bold text-brand-secondary mt-8 mb-4">{generatedBook.outputLanguage === 'en' ? 'Chapter' : 'Capítulo'} {index + 1}: {chapter.titulo}</h2>
                         {chapter.contenido?.map((section, sIndex) => (
                             <div key={sIndex} className="mb-6">
                                 <h3 className="text-xl font-semibold text-brand-accent mb-2">{section.titulo}</h3>
@@ -346,7 +392,7 @@ const App: React.FC = () => {
                 <h2 className="text-2xl font-bold text-brand-secondary mt-8 mb-4">{generatedBook.conclusion.titulo}</h2>
                 <p className="text-text-primary whitespace-pre-wrap leading-relaxed">{generatedBook.conclusion.texto}</p>
 
-                <h2 className="text-2xl font-bold text-brand-secondary mt-8 mb-4">Referencias</h2>
+                <h2 className="text-2xl font-bold text-brand-secondary mt-8 mb-4">{generatedBook.outputLanguage === 'en' ? 'References' : 'Referencias'}</h2>
                 <div className="text-sm text-text-secondary space-y-2">
                     {[
                         ...new Set([
@@ -360,10 +406,7 @@ const App: React.FC = () => {
                 </div>
             </div>
              <div className="mt-6 text-center">
-                <button
-                    onClick={() => { setStep(AppStep.Input); setUserInput(''); setBookOutline(null); setGeneratedBook(null); setWordCount(0); }}
-                    className="bg-brand-primary text-white font-bold py-3 px-8 rounded-lg shadow-md hover:bg-brand-dark transition-colors duration-300"
-                >
+                <button onClick={() => { setStep(AppStep.Input); setUserInput(''); setBookOutline(null); setGeneratedBook(null); setWordCount(0); setUploadedFiles([]); setFileContent(''); }} className="bg-brand-primary text-white font-bold py-3 px-8 rounded-lg shadow-md hover:bg-brand-dark transition-colors duration-300">
                     Crear un Nuevo Libro
                 </button>
             </div>
@@ -402,7 +445,7 @@ const App: React.FC = () => {
                 {renderContent()}
             </main>
             <footer className="bg-gray-200 text-center p-4 text-sm text-text-secondary">
-                <p>&copy; {new Date().getFullYear()} Asistente de Escritura Académica. Creado con React y Gemini API.</p>
+                <p>&copy; {new Date().getFullYear()} Asistente de Escritura IA. Creado con React y Gemini API.</p>
             </footer>
         </div>
     );
