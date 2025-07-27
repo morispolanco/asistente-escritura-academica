@@ -1,4 +1,3 @@
-
 import { GoogleGenAI, Type, GenerateContentResponse, GroundingChunk } from "@google/genai";
 import type { BookOutline } from '../types';
 
@@ -137,6 +136,7 @@ export const generateSectionContent = async (
     wordsPerSection: number,
     outputLanguage: string,
     fileContent: string,
+    includeReferences: boolean
 ): Promise<{ texto: string; fuentes: GroundingChunk[] }> => {
     const isEnglish = outputLanguage === 'en';
 
@@ -160,13 +160,9 @@ export const generateSectionContent = async (
         style: isEnglish
             ? `- Write with the appropriate tone and complexity for the defined publication type and audience. For 'academic' or 'technical' publications, use precise and well-structured language. For 'general dissemination', use more accessible language.`
             : `- Escribe con el tono y la complejidad adecuados para el tipo de publicación y el público definidos. Para publicaciones 'académica' o 'técnica', utiliza un lenguaje preciso y bien estructurado. Para 'difusión general', usa un lenguaje más accesible.`,
-        searchInstruction: publicationType === 'académica'
-            ? isEnglish
-                ? `- Research and use reliable sources using exclusively Google Scholar to back up ALL claims. Prioritize peer-reviewed scientific articles, theses, and academic publications.`
-                : `- Investiga y utiliza fuentes fiables usando exclusivamente Google Académico (Google Scholar) para respaldar TODAS las afirmaciones. Prioriza artículos científicos, tesis y publicaciones académicas revisadas por pares.`
-            : isEnglish
-                ? `- Research and use reliable sources using Google Search to back up ALL claims.`
-                : `- Investiga y utiliza fuentes fiables usando la búsqueda de Google para respaldar TODAS las afirmaciones.`,
+        searchInstruction: isEnglish
+            ? `- Research and use reliable sources using exclusively Google Scholar to back up ALL claims. Prioritize peer-reviewed scientific articles, theses, and academic publications.`
+            : `- Investiga y utiliza fuentes fiables usando exclusivamente Google Académico (Google Scholar) para respaldar TODAS las afirmaciones. Prioriza artículos científicos, tesis y publicaciones académicas revisadas por pares.`,
         citations: isEnglish
             ? `- Insert citations in APA (Author, Year) format directly in the text where necessary.`
             : `- Inserta citas en formato APA (Autor, Año) directamente en el texto donde sea necesario.`,
@@ -178,7 +174,7 @@ export const generateSectionContent = async (
             : "Eres un escritor académico experto en investigación y redacción. Tu objetivo es escribir contenido de alta calidad, bien referenciado en formato APA 7, adaptando tu estilo a los parámetros especificados. Prioriza la información del material de base proporcionado por el usuario si está disponible. No crees una lista de referencias al final de tu respuesta."
     };
 
-    const prompt = `
+    let prompt = `
 ${langInstructions.task}
 
 ${langInstructions.bookContext}
@@ -194,24 +190,33 @@ ${langInstructions.section} "${sectionTitle}"
 
 ${langInstructions.writingInstructions}
 ${langInstructions.wordCount}
-${langInstructions.style}
-${langInstructions.searchInstruction}
-${langInstructions.citations}
-${langInstructions.dialogue}
-    `.trim();
+${langInstructions.style}`;
+
+    if (includeReferences) {
+        prompt += `\n${langInstructions.searchInstruction}\n${langInstructions.citations}`;
+    }
+
+    prompt += `\n${langInstructions.dialogue}`;
+    prompt = prompt.trim();
 
     try {
+        const config: { systemInstruction: string; tools?: any; } = {
+            systemInstruction: langInstructions.systemInstruction,
+        };
+        if (includeReferences) {
+            config.tools = [{ googleSearch: {} }];
+        }
+        
         const response: GenerateContentResponse = await ai.models.generateContent({
             model: "gemini-2.5-flash",
             contents: prompt,
-            config: {
-                tools: [{ googleSearch: {} }],
-                systemInstruction: langInstructions.systemInstruction,
-            },
+            config,
         });
         
         const content = response.text;
-        const groundingChunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
+        const groundingChunks = includeReferences 
+            ? response.candidates?.[0]?.groundingMetadata?.groundingChunks || []
+            : [];
         
         const textoLimpio = cleanGeneratedText(content, sectionTitle);
             

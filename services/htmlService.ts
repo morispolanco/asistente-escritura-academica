@@ -1,4 +1,3 @@
-
 import type { GeneratedBook } from '../types';
 
 const generateHtmlContent = (book: GeneratedBook): string => {
@@ -33,12 +32,14 @@ const generateHtmlContent = (book: GeneratedBook): string => {
                 <div class="content">${book.conclusion.texto}</div>
             </section>
 
+            ${sortedReferences.length > 0 ? `
             <section>
                 <h2 class="h1">${isEnglish ? 'References' : 'Referencias'}</h2>
                 <div class="references">
                     ${sortedReferences.map(ref => `<p>${ref.replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')}</p>`).join('')}
                 </div>
             </section>
+            ` : ''}
         </article>
     `;
 
